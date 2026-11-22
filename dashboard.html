@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skills Radar</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --ink: #1c1b19; --muted: #6f6b64; --faint: #a19c93;
+    --line: #e6e3dc; --accent: #c4622d; --accent-soft: #f6e6dc; --up: #2f8a4f; --down: #b8433a;
+    --bar: #e9e5dd; --chip: #f0ede7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151413; --panel: #1d1c1a; --ink: #ecebe7; --muted: #a29e96; --faint: #6d6a64;
+      --line: #2c2a27; --accent: #e08454; --accent-soft: #3a2a20; --up: #5cc282; --down: #e2746a;
+      --bar: #2c2a27; --chip: #262422;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #151413; --panel: #1d1c1a; --ink: #ecebe7; --muted: #a29e96; --faint: #6d6a64;
+    --line: #2c2a27; --accent: #e08454; --accent-soft: #3a2a20; --up: #5cc282; --down: #e2746a;
+    --bar: #2c2a27; --chip: #262422;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 18px 16px 40px; }
+
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  h1 { font-size: 19px; margin: 0; letter-spacing: -0.01em; font-weight: 650; }
+  h1 span { color: var(--accent); }
+  .meta { color: var(--muted); font-size: 12.5px; }
+  .meta.stale { color: var(--down); }
+  .spacer { flex: 1; }
+  .iconbtn { border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+    border-radius: 8px; padding: 4px 9px; font: inherit; font-size: 12.5px; cursor: pointer; }
+  .iconbtn:hover { color: var(--ink); }
+
+  .controls { position: sticky; top: 0; z-index: 2; background: var(--bg);
+    display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 0 10px; border-bottom: 1px solid var(--line); }
+  input[type=search] { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line); background: var(--panel);
+    color: var(--ink); border-radius: 9px; padding: 7px 11px; font: inherit; outline: none; }
+  input[type=search]:focus { border-color: var(--accent); }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; background: var(--panel); }
+  .seg button { border: 0; background: transparent; color: var(--muted); padding: 7px 11px; font: inherit;
+    font-size: 13px; cursor: pointer; }
+  .seg button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  select { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 9px;
+    padding: 7px 8px; font: inherit; font-size: 13px; }
+
+  ol { list-style: none; margin: 0; padding: 0; }
+  li.row { display: grid; grid-template-columns: 34px 1fr 86px; gap: 12px; align-items: start;
+    padding: 12px 4px; border-bottom: 1px solid var(--line); }
+  li.row:hover { background: color-mix(in srgb, var(--panel) 70%, transparent); }
+  .rank { text-align: right; font-variant-numeric: tabular-nums; }
+  .rank b { display: block; font-size: 15px; font-weight: 600; }
+  .delta { font-size: 11px; font-weight: 600; }
+  .delta.up { color: var(--up); } .delta.down { color: var(--down); } .delta.new { color: var(--accent); }
+  .delta.same { color: var(--faint); }
+
+  .main { min-width: 0; }
+  .title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .title img { width: 18px; height: 18px; border-radius: 5px; flex: none; background: var(--chip); }
+  .title a { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .title a .owner { color: var(--muted); font-weight: 450; }
+  .title a:hover { color: var(--accent); }
+  .desc { color: var(--muted); margin: 3px 0 7px; font-size: 13px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .facts { display: flex; gap: 6px 12px; flex-wrap: wrap; font-size: 12px; color: var(--muted);
+    font-variant-numeric: tabular-nums; }
+  .facts .hot { color: var(--accent); font-weight: 600; }
+  .facts .est { color: var(--faint); }
+
+  .score { text-align: right; }
+  .score b { font-size: 17px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .bar { height: 4px; background: var(--bar); border-radius: 3px; margin: 5px 0 6px; overflow: hidden; display: flex; }
+  .bar i { display: block; height: 100%; }
+  .bar .p { background: color-mix(in srgb, var(--accent) 45%, var(--bar)); }
+  .bar .m { background: var(--accent); }
+  .bar .f { background: color-mix(in srgb, var(--accent) 25%, var(--bar)); }
+  svg.spark { width: 86px; height: 20px; display: block; }
+  svg.spark path { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+
+  .guide { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 4px 18px 14px; margin: 12px 0 4px; font-size: 13.5px; }
+  .guide[hidden] { display: none; }
+  .guide h2 { font-size: 14px; margin: 14px 0 6px; font-weight: 650; }
+  .guide p, .guide li { color: var(--muted); }
+  .guide b, .guide strong { color: var(--ink); }
+  .guide ul { margin: 4px 0; padding-left: 18px; }
+  .guide li { margin: 3px 0; }
+  .guide .formula { font-family: "Cascadia Code", Consolas, ui-monospace, monospace; font-size: 12.5px;
+    background: var(--chip); border-radius: 8px; padding: 10px 12px; color: var(--ink); white-space: pre-wrap; line-height: 1.6; }
+  .guide .note { border-left: 3px solid var(--accent); padding: 2px 0 2px 10px; margin: 10px 0 0; }
+  .guide .sw { display: inline-block; width: 18px; height: 6px; border-radius: 3px; vertical-align: middle; margin-right: 4px; }
+  .badge { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+  .badge.warn { background: color-mix(in srgb, var(--down) 15%, transparent); color: var(--down); }
+  .badge.ok { background: color-mix(in srgb, var(--up) 15%, transparent); color: var(--up); }
+  .badge.info { background: var(--accent-soft); color: var(--accent); }
+  .score small { display: block; color: var(--faint); font-size: 11px; margin-top: -2px; }
+  .empty { padding: 50px 10px; text-align: center; color: var(--muted); }
+  .empty code { background: var(--chip); padding: 2px 6px; border-radius: 5px; }
+  footer { margin-top: 16px; color: var(--faint); font-size: 12px; }
+
+  /* Widget mode: narrow windows */
+  @media (max-width: 560px) {
+    .wrap { padding: 12px 12px 30px; }
+    li.row { grid-template-columns: 26px 1fr 52px; gap: 8px; padding: 10px 2px; }
+    .desc { -webkit-line-clamp: 1; }
+    svg.spark { display: none; }
+    .facts .opt { display: none; }
+    .seg button { padding: 6px 8px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Skills <span>Radar</span></h1>
+    <span class="meta" id="meta"></span>
+    <span class="spacer"></span>
+    <button class="iconbtn" id="help" title="Guide (?)">? Guide</button>
+    <button class="iconbtn" id="theme" title="Toggle theme">◐</button>
+    <button class="iconbtn" id="reload" title="Reload data (R)">↻</button>
+  </header>
+
+  <section class="guide" id="guide" hidden>
+    <h2>Views</h2>
+    <ul>
+      <li><b>Score</b>: the main ranking. It balances how popular a repo is, how fast it is growing right now and how actively it is maintained. Use it to see <i>what matters at the moment</i>.</li>
+      <li><b>Hot</b>: sorted only by stars gained per day. Shows what is taking off right now, even if it is small or brand new.</li>
+      <li><b>New</b>: youngest repos first. Use it to discover just-published projects that have already passed the minimum star threshold.</li>
+      <li><b>All-time</b>: the most-starred repos ever, including stale or archived ones. The number on the right is total stars, not the Score. Badges: <span class="badge warn">stale Xmo</span> if there has been no push for more than <span data-v="stale"></span> days, <span class="badge warn">archived</span> if the author has closed it, <span class="badge ok">active</span> if it is maintained and <span class="badge info">Score #n</span> if it also appears in the Score ranking.</li>
+    </ul>
+
+    <h2>Reading a row</h2>
+    <ul>
+      <li><b>Number on the left</b>: position in the ranking. Below it: <b style="color:var(--up)">▲n</b> / <b style="color:var(--down)">▼n</b> positions gained or lost since the previous update, <b style="color:var(--accent)">new</b> if it has just entered the ranking.</li>
+      <li><b>★</b> total stars · <b>+N/day</b> stars per day. A <b>~</b> means the value is <i>estimated</i> (stars ÷ repo age) because there is no history yet; after about a day of updates it is measured over the last <span data-v="window"></span> days. Highlighted in orange at ≥ 20/day.</li>
+      <li><b>pushed</b>: last commit · <b>age</b>: age of the repo.</li>
+      <li><b>Number on the right</b>: the Score (0–100). The bar shows what it is made of:
+        <span class="sw" style="background:var(--accent)"></span>momentum
+        <span class="sw" style="background:color-mix(in srgb, var(--accent) 45%, var(--bar))"></span>popularity
+        <span class="sw" style="background:color-mix(in srgb, var(--accent) 25%, var(--bar))"></span>freshness. Hover over the score for exact values.</li>
+      <li><b>Sparkline</b>: star count over time (appears once history is available).</li>
+    </ul>
+
+    <h2>How the Score is calculated</h2>
+    <div class="formula" id="formula"></div>
+    <p>Popularity and momentum use a logarithmic scale and are <b>relative to the best repo in the pool</b>: the most-starred repo scores 1 on popularity, the fastest-growing one scores 1 on momentum. The logarithm keeps giants from crushing everyone else: going from 10 to 100 stars counts as much as going from 1,000 to 10,000. The Score is therefore a comparison between tracked repos, not an absolute grade.</p>
+    <div class="formula" id="example"></div>
+
+    <h2>Which repos are included</h2>
+    <p>GitHub repos with the topics <span data-v="topics"></span>, at least <span data-v="minstars"></span> stars and a push in the last <span data-v="pushage"></span> days, excluding forks and archived repos. A separate search collects repos created in the last <span data-v="rising"></span> days, so newcomers are not buried by the big ones. Out of <span data-v="cand"></span> candidates, the top <span data-v="shown"></span> by Score are shown here.</p>
+
+    <h2>All-time vs Score: which to use</h2>
+    <p>All-time measures <b>accumulated trust</b>: stars add up over the years and almost never go down, so whoever is at the top stays there for a long time, even after development stops. It works like VS Code extension installs or the number of Amazon reviews: a strong reliability signal, but one that rewards whoever got there first.</p>
+    <p class="note">Skills carry an extra risk: Claude Code and the skill format change quickly, and a skill untouched for months may be outdated or no longer work. Use <b>All-time</b> to find established references, always checking the activity badge, and <b>Score/Hot</b> to discover what is emerging. The sweet spot is a repo high in All-time with a <span class="badge info">Score #n</span> badge: widely trusted <i>and</i> still alive.</p>
+  </section>
+
+  <div class="controls">
+    <input type="search" id="q" placeholder="Filter repos, topics, descriptions…  ( / )" autocomplete="off">
+    <div class="seg" id="sort" role="group" aria-label="Sort">
+      <button data-k="score">Score</button>
+      <button data-k="hot">Hot</button>
+      <button data-k="new">New</button>
+      <button data-k="alltime">All-time</button>
+    </div>
+    <select id="lang" aria-label="Language"><option value="">All langs</option></select>
+  </div>
+
+  <ol id="list"></ol>
+  <footer id="foot"></footer>
+</div>
+
+<script src="data/ranking.js"></script>
+<script>
+(() => {
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem("radar:" + k); return v === null ? d : v; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem("radar:" + k, v); } catch {} },
+  };
+  const $ = (id) => document.getElementById(id);
+  const data = window.RANKING;
+  const list = $("list");
+
+  const theme = store.get("theme", "");
+  if (theme) document.documentElement.dataset.theme = theme;
+  $("theme").onclick = () => {
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    const cur = document.documentElement.dataset.theme || (dark ? "dark" : "light");
+    const next = cur === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next; store.set("theme", next);
+  };
+  $("reload").onclick = () => location.reload();
+
+  if (!data || !data.items) {
+    list.innerHTML = '<li class="empty">No data yet. Run <code>python tracker.py</code> in the repo folder.</li>';
+    return;
+  }
+
+  const ago = (iso) => {
+    const s = (Date.now() - new Date(iso)) / 1000;
+    if (s < 3600) return Math.max(1, Math.round(s / 60)) + "m ago";
+    if (s < 86400) return Math.round(s / 3600) + "h ago";
+    return Math.round(s / 86400) + "d ago";
+  };
+  const days = (d) => d < 1 ? "today" : d < 2 ? "1d" : Math.round(d) + "d";
+  const fmt = (n) => n >= 10000 ? (n / 1000).toFixed(n >= 100000 ? 0 : 1) + "k" : n.toLocaleString();
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  const ageHours = (Date.now() - new Date(data.generated_at)) / 3.6e6;
+  const meta = $("meta");
+  if (ageHours > 6) meta.classList.add("stale");
+
+  const allTime = data.all_time || [];
+  const langs = [...new Set([...data.items, ...allTime].map((i) => i.language))].sort();
+  for (const l of langs) $("lang").insertAdjacentHTML("beforeend", `<option>${esc(l)}</option>`);
+
+  const sorters = {
+    score: (a, b) => a.rank - b.rank,
+    hot: (a, b) => b.stars_per_day - a.stars_per_day,
+    new: (a, b) => a.age_days - b.age_days,
+    alltime: (a, b) => a.rank - b.rank,
+  };
+  let sortKey = store.get("sort", "score");
+  if (!sorters[sortKey]) sortKey = "score";
+  const months = (d) => d < 60 ? Math.round(d) + "d" : Math.round(d / 30) + "mo";
+
+  function spark(pts) {
+    if (!pts || pts.length < 2) return "";
+    const min = Math.min(...pts), max = Math.max(...pts), span = max - min || 1;
+    const d = pts.map((v, i) => `${i ? "L" : "M"}${(i / (pts.length - 1) * 84 + 1).toFixed(1)},${(19 - (v - min) / span * 17).toFixed(1)}`).join("");
+    return `<svg class="spark" viewBox="0 0 86 20" aria-hidden="true"><path d="${d}"/></svg>`;
+  }
+
+  function delta(it) {
+    if (it.prev_rank == null) return '<span class="delta new">new</span>';
+    const d = it.prev_rank - it.rank;
+    if (d > 0) return `<span class="delta up">▲${d}</span>`;
+    if (d < 0) return `<span class="delta down">▼${-d}</span>`;
+    return '<span class="delta same">·</span>';
+  }
+
+  function allTimeRow(it) {
+    const [owner, repo] = it.name.split("/");
+    const est = it.velocity_source !== "measured";
+    const status = it.archived ? '<span class="badge warn">archived</span>'
+      : it.stale ? `<span class="badge warn" title="No push for ${Math.round(it.days_since_push)} days">stale ${months(it.days_since_push)}</span>`
+      : '<span class="badge ok">active</span>';
+    const inScore = it.score_rank ? `<span class="badge info" title="Position in the Score ranking">Score #${it.score_rank}</span>` : "";
+    return `<li class="row">
+      <div class="rank"><b>${it.rank}</b>${delta(it)}</div>
+      <div class="main">
+        <div class="title"><img src="${esc(it.owner_avatar)}&s=40" alt="" loading="lazy">
+          <a href="${esc(it.url)}" target="_blank" rel="noopener" title="${esc(it.name)}"><span class="owner">${esc(owner)}/</span>${esc(repo)}</a></div>
+        <div class="desc">${esc(it.description || "No description")}</div>
+        <div class="facts">
+          ${status}${inScore}
+          <span class="${est ? "est" : ""}">+${fmt(Math.round(it.stars_per_day))}/day${est ? "~" : ""}</span>
+          <span>pushed ${days(it.days_since_push)}</span>
+          <span class="opt">${esc(it.language)}</span>
+          <span class="opt">age ${days(it.age_days)}</span>
+        </div>
+      </div>
+      <div class="score" title="${it.stars.toLocaleString()} total stars">
+        <b>${fmt(it.stars)}</b><small>★ total</small>
+        ${spark(it.spark)}
+      </div>
+    </li>`;
+  }
+
+  function render() {
+    document.querySelectorAll("#sort button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.k === sortKey));
+    const q = $("q").value.trim().toLowerCase();
+    const lang = $("lang").value;
+    const w = data.weights;
+    const isAll = sortKey === "alltime";
+    meta.textContent = (isAll
+      ? `${allTime.length} most-starred repos · updated ${ago(data.generated_at)}`
+      : `${data.items.length} of ${data.candidates} repos · updated ${ago(data.generated_at)}`)
+      + (ageHours > 6 ? " · stale, run tracker.py" : "");
+    const rows = (isAll ? allTime : data.items)
+      .filter((i) => !lang || i.language === lang)
+      .filter((i) => !q || (i.name + " " + i.description + " " + i.topics.join(" ")).toLowerCase().includes(q))
+      .sort(sorters[sortKey]);
+
+    if (!rows.length) {
+      list.innerHTML = `<li class="empty">${isAll && !allTime.length ? "No all-time data yet. Run <code>python tracker.py</code>." : "Nothing matches."}</li>`;
+      return;
+    }
+    if (isAll) { list.innerHTML = rows.map(allTimeRow).join(""); return; }
+    list.innerHTML = rows.map((it) => {
+      const [owner, repo] = it.name.split("/");
+      const c = it.components;
+      const est = it.velocity_source !== "measured";
+      const hot = it.stars_per_day >= 20;
+      return `<li class="row">
+        <div class="rank"><b>${it.rank}</b>${delta(it)}</div>
+        <div class="main">
+          <div class="title"><img src="${esc(it.owner_avatar)}&s=40" alt="" loading="lazy">
+            <a href="${esc(it.url)}" target="_blank" rel="noopener" title="${esc(it.name)}"><span class="owner">${esc(owner)}/</span>${esc(repo)}</a></div>
+          <div class="desc">${esc(it.description || "No description")}</div>
+          <div class="facts">
+            <span>★ ${fmt(it.stars)}</span>
+            <span class="${hot ? "hot" : ""}${est ? " est" : ""}" title="${est ? "Estimated from lifetime average until history builds up" : "Measured over last " + data.velocity_window_days + " days"}">+${fmt(Math.round(it.stars_per_day))}/day${est ? "~" : ""}</span>
+            <span>pushed ${days(it.days_since_push)}</span>
+            <span class="opt">${esc(it.language)}</span>
+            <span class="opt">age ${days(it.age_days)}</span>
+          </div>
+        </div>
+        <div class="score" title="popularity ${c.popularity} · momentum ${c.momentum} · freshness ${c.freshness}">
+          <b>${it.score.toFixed(0)}</b>
+          <div class="bar"><i class="m" style="width:${c.momentum * w.momentum * 100}%"></i><i class="p" style="width:${c.popularity * w.popularity * 100}%"></i><i class="f" style="width:${c.freshness * w.freshness * 100}%"></i></div>
+          ${spark(it.spark)}
+        </div>
+      </li>`;
+    }).join("");
+  }
+
+  $("sort").onclick = (e) => { const k = e.target.dataset.k; if (k) { sortKey = k; store.set("sort", k); render(); } };
+  $("q").oninput = render;
+  $("lang").onchange = render;
+  document.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT") { if (e.key === "Escape") { e.target.value = ""; render(); e.target.blur(); } return; }
+    if (e.key === "/") { e.preventDefault(); $("q").focus(); }
+    if (e.key === "r" || e.key === "R") location.reload();
+  });
+
+  // Guide: fill in live parameters and a worked example on a top repo with non-trivial components.
+  const guide = $("guide");
+  const toggleGuide = (open) => { guide.hidden = !open; store.set("guide", open ? "1" : "0"); };
+  guide.hidden = store.get("guide", "0") !== "1";
+  $("help").onclick = () => toggleGuide(guide.hidden);
+  const half = data.freshness_half_life_days ?? 10;
+  const vals = {
+    window: data.velocity_window_days, topics: data.topics.map((t) => "<code>" + esc(t) + "</code>").join(", "),
+    minstars: data.min_stars ?? 5, pushage: data.max_push_age_days ?? 90, rising: data.rising_max_age_days ?? 30,
+    cand: data.candidates, shown: data.items.length, stale: data.stale_after_days ?? 180,
+  };
+  guide.querySelectorAll("[data-v]").forEach((el) => { el.innerHTML = vals[el.dataset.v]; });
+  const pct = (x) => Math.round(x * 100);
+  $("formula").textContent =
+`popularity = ln(1 + stars)         ÷ ln(1 + stars of the most-starred repo)
+momentum   = ln(1 + stars per day) ÷ ln(1 + stars/day of the fastest repo)
+freshness  = 0.5 ^ (days since last push ÷ ${half})   → halves every ${half} days
+
+Score = 100 × ( ${pct(w.popularity)}% popularity + ${pct(w.momentum)}% momentum + ${pct(w.freshness)}% freshness )`;
+  const top = data.items.find((i) => i.components.popularity < 0.99 && i.components.momentum < 0.99 && i.components.freshness < 0.99) || data.items[0], tc = top.components;
+  const n = (x, d = 2) => Number(x).toLocaleString("en-US", { maximumFractionDigits: d });
+  $("example").textContent =
+`Example: #${top.rank} ${top.name}
+  popularity = ${n(tc.popularity, 3)}   (${n(top.stars, 0)} stars${data.max_stars ? " of max " + n(data.max_stars, 0) : ""})
+  momentum   = ${n(tc.momentum, 3)}   (${n(top.stars_per_day)} stars/day${top.velocity_source !== "measured" ? ", estimated" : ""})
+  freshness  = ${n(tc.freshness, 3)}   (pushed ${n(top.days_since_push, 1)} days ago)
+  Score = 100 × (${w.popularity}×${n(tc.popularity, 3)} + ${w.momentum}×${n(tc.momentum, 3)} + ${w.freshness}×${n(tc.freshness, 3)}) = ${n(top.score, 1)}`;
+  document.addEventListener("keydown", (e) => { if (e.key === "?" && e.target.tagName !== "INPUT") toggleGuide(guide.hidden); });
+
+  $("foot").textContent = `Score = ${w.popularity * 100}% popularity + ${w.momentum * 100}% momentum + ${w.freshness * 100}% freshness · topics: ${data.topics.join(", ")}`;
+  render();
+  // Pick up fresh data written by the scheduled tracker.
+  setInterval(() => { if (document.visibilityState === "visible" && !$("q").value) location.reload(); }, 15 * 60 * 1000);
+})();
+</script>
+</body>
+</html>

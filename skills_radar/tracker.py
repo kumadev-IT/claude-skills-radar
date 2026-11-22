@@ -9,17 +9,20 @@ Pipeline (one run):
      velocity (stars/day over the last VELOCITY_WINDOW_DAYS). Until enough
      history exists, velocity is estimated from lifetime average.
   4. Score = weighted mix of popularity, momentum and freshness (0-100).
-  5. Write data/ranking.json and data/ranking.js (read by dashboard.html).
+  5. Write ranking.json / ranking.js into the data directory.
 
-Standard library only. Set GITHUB_TOKEN for a higher rate limit.
+Standard library only. Token lookup: GITHUB_TOKEN, GH_TOKEN, then `gh auth token`
+(a token raises GitHub's search limit from 10 to 30 requests/minute).
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
-import sys
+import shutil
+import subprocess
 import time
 import urllib.error
 import urllib.parse
@@ -27,11 +30,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / "data"
-HISTORY_FILE = DATA_DIR / "history.json"
-RANKING_FILE = DATA_DIR / "ranking.json"
-RANKING_JS_FILE = DATA_DIR / "ranking.js"
+log = logging.getLogger("skills_radar.tracker")
 
 # === Config =========================================================
 
@@ -53,7 +52,7 @@ DASHBOARD_TOP_N = 150
 ALL_TIME_TOP_N = 100
 STALE_AFTER_DAYS = 180     # all-time entries untouched this long get flagged
 
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+GITHUB_TOKEN = ""  # resolved at run time, see _resolve_token()
 API = "https://api.github.com/search/repositories"
 
 NOW = datetime.now(timezone.utc)
@@ -91,7 +90,7 @@ def _get(params: dict) -> dict:
                     n = int(reset)
                     wait = n if n < 1_000_000 else max(1, n - int(time.time()))
                 wait = min(wait + 1, 65)
-                print(f"rate limited, waiting {wait}s")
+                log.warning("rate limited, waiting %ss", wait)
                 time.sleep(wait)
                 continue
             raise
@@ -110,8 +109,6 @@ def _search(q: str, sort: str, pages: int = 1) -> list[dict]:
 
 
 def fetch_candidates() -> list[dict]:
-    if not GITHUB_TOKEN:
-        print("WARN: GITHUB_TOKEN not set; using anonymous quota (10 searches/min)")
     pushed_since = (NOW - timedelta(days=MAX_PUSH_AGE_DAYS)).date().isoformat()
     created_since = (NOW - timedelta(days=RISING_MAX_AGE_DAYS)).date().isoformat()
 
@@ -130,7 +127,7 @@ def fetch_candidates() -> list[dict]:
         if r.get("fork") or r.get("archived"):
             continue
         seen[r["full_name"]] = r
-    print(f"fetched {len(raw)} results, {len(seen)} unique candidates")
+    log.info("fetched %d results, %d unique candidates", len(raw), len(seen))
     return list(seen.values())
 
 
@@ -140,7 +137,7 @@ def fetch_all_time() -> list[dict]:
     for topic in TOPICS:
         for r in _search(f"topic:{topic} stars:>={MIN_STARS} fork:false", "stars"):
             seen[r["full_name"]] = r
-    print(f"all-time: {len(seen)} unique repos")
+    log.info("all-time: %d unique repos", len(seen))
     return list(seen.values())
 
 
@@ -234,20 +231,44 @@ def score_repos(repos: list[dict], history: dict) -> list[dict]:
 # === Output =========================================================
 
 
-def main() -> int:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+def _resolve_token() -> str:
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN") or ""
+    if not token and shutil.which("gh"):
+        try:
+            out = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, timeout=5,
+                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            token = out.stdout.strip() if out.returncode == 0 else ""
+        except (OSError, subprocess.SubprocessError):
+            token = ""
+    return token
+
+
+def _write_atomic(path: Path, text: str) -> None:
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def run(data_dir: Path) -> dict:
+    """Fetch, score and write ranking files into data_dir. Returns a short summary."""
+    global NOW, GITHUB_TOKEN
+    NOW = datetime.now(timezone.utc)
+    GITHUB_TOKEN = _resolve_token()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    history_file = data_dir / "history.json"
+    ranking_file = data_dir / "ranking.json"
+
     repos = fetch_candidates()
     if not repos:
-        print("No candidates fetched; keeping previous data.")
-        return 1
+        raise RuntimeError("No candidates fetched from GitHub; keeping previous data.")
 
     all_time_repos = sorted(fetch_all_time(), key=lambda r: -r["stargazers_count"])[:ALL_TIME_TOP_N]
 
-    history = update_history(_load(HISTORY_FILE, {}),
+    history = update_history(_load(history_file, {}),
                              list({r["full_name"]: r for r in repos + all_time_repos}.values()))
     items = score_repos(repos, history)
 
-    prev = _load(RANKING_FILE, {})
+    prev = _load(ranking_file, {})
     prev_ranks = {i["id"]: i["rank"] for i in prev.get("items", [])}
     prev_all_time = {i["id"]: i["rank"] for i in prev.get("all_time", [])}
     score_ranks = {i["id"]: i["rank"] for i in items}
@@ -281,16 +302,9 @@ def main() -> int:
         "items": top,
         "all_time": all_time,
     }
-    RANKING_FILE.write_text(json.dumps(ranking, indent=1, ensure_ascii=False), encoding="utf-8")
-    # A <script> include works from file:// where fetch() of JSON does not.
-    RANKING_JS_FILE.write_text("window.RANKING = " + json.dumps(ranking, ensure_ascii=False) + ";\n",
-                               encoding="utf-8")
-    HISTORY_FILE.write_text(json.dumps(history, separators=(",", ":")), encoding="utf-8")
+    _write_atomic(history_file, json.dumps(history, separators=(",", ":")))
+    _write_atomic(ranking_file, json.dumps(ranking, indent=1, ensure_ascii=False))
+    _write_atomic(data_dir / "ranking.js", "window.RANKING = " + json.dumps(ranking, ensure_ascii=False) + ";\n")
 
-    print(f"ranked {len(items)} repos, all-time {len(all_time)}  ({NOW.strftime('%Y-%m-%d %H:%M UTC')})")
-    print("top 5:", ", ".join(f"{i['name']} ({i['score']})" for i in items[:5]))
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    return {"ranked": len(items), "all_time": len(all_time), "authenticated": bool(GITHUB_TOKEN),
+            "top": [i["name"] for i in items[:5]], "generated_at": ranking["generated_at"]}

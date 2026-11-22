@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Skills Radar</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.png">
+<meta name="theme-color" content="#1d1c1a">
 <style>
   :root {
     --bg: #f6f5f2; --panel: #ffffff; --ink: #1c1b19; --muted: #6f6b64; --faint: #a19c93;
@@ -33,6 +36,9 @@
   h1 span { color: var(--accent); }
   .meta { color: var(--muted); font-size: 12.5px; }
   .meta.stale { color: var(--down); }
+  .meta.busy::after { content: " · refreshing…"; color: var(--accent); }
+  #reload.spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .spacer { flex: 1; }
   .iconbtn { border: 1px solid var(--line); background: var(--panel); color: var(--muted);
     border-radius: 8px; padding: 4px 9px; font: inherit; font-size: 12.5px; cursor: pointer; }
@@ -123,7 +129,7 @@
     <span class="spacer"></span>
     <button class="iconbtn" id="help" title="Guide (?)">? Guide</button>
     <button class="iconbtn" id="theme" title="Toggle theme">◐</button>
-    <button class="iconbtn" id="reload" title="Reload data (R)">↻</button>
+    <button class="iconbtn" id="reload" title="Fetch fresh data from GitHub (R)">↻</button>
   </header>
 
   <section class="guide" id="guide" hidden>
@@ -175,7 +181,7 @@
   <footer id="foot"></footer>
 </div>
 
-<script src="data/ranking.js"></script>
+<script src="/data/ranking.js"></script>
 <script>
 (() => {
   const store = {
@@ -194,10 +200,37 @@
     const next = cur === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = next; store.set("theme", next);
   };
-  $("reload").onclick = () => location.reload();
+  // --- Local server: refresh button, status polling, auto-reload on new data ---
+  const api = async (path, method = "GET") => {
+    try { const r = await fetch(path, { method }); return r.ok ? await r.json() : null; } catch { return null; }
+  };
+  let lastAge = null;
+  function setBusy(busy) {
+    $("reload").classList.toggle("spin", busy);
+    $("meta").classList.toggle("busy", busy);
+  }
+  async function poll() {
+    const st = await api("/api/status");
+    if (!st) return;
+    setBusy(st.refreshing);
+    const typing = document.activeElement === $("q") || $("q").value;
+    const fresher = st.data_age_minutes != null && (lastAge == null || st.data_age_minutes < lastAge - 0.5);
+    if (fresher && !st.refreshing && (!data || !data.items || !typing)) return location.reload();
+    if (st.last_error && !st.refreshing) $("meta").title = "Last refresh failed: " + st.last_error;
+    lastAge = st.data_age_minutes;
+  }
+  async function refreshNow() {
+    const st = await api("/api/refresh", "POST");
+    if (!st) return location.reload();  // no server (opened as a file): just reload
+    setBusy(true);
+  }
+  $("reload").onclick = refreshNow;
+  api("/api/status").then((st) => { if (st) { lastAge = st.data_age_minutes; setBusy(st.refreshing); } });
+  setInterval(poll, 4000);
 
   if (!data || !data.items) {
-    list.innerHTML = '<li class="empty">No data yet. Run <code>python tracker.py</code> in the repo folder.</li>';
+    list.innerHTML = '<li class="empty">Collecting data from GitHub for the first time…<br>This takes about a minute; the page will update by itself.</li>';
+    api("/api/status").then((st) => { if (st && !st.refreshing) refreshNow(); });
     return;
   }
 
@@ -281,7 +314,7 @@
     meta.textContent = (isAll
       ? `${allTime.length} most-starred repos · updated ${ago(data.generated_at)}`
       : `${data.items.length} of ${data.candidates} repos · updated ${ago(data.generated_at)}`)
-      + (ageHours > 6 ? " · stale, run tracker.py" : "");
+      + (ageHours > 6 ? " · stale, press ↻" : "");
     const rows = (isAll ? allTime : data.items)
       .filter((i) => !lang || i.language === lang)
       .filter((i) => !q || (i.name + " " + i.description + " " + i.topics.join(" ")).toLowerCase().includes(q))
@@ -326,7 +359,7 @@
   document.addEventListener("keydown", (e) => {
     if (e.target.tagName === "INPUT") { if (e.key === "Escape") { e.target.value = ""; render(); e.target.blur(); } return; }
     if (e.key === "/") { e.preventDefault(); $("q").focus(); }
-    if (e.key === "r" || e.key === "R") location.reload();
+    if (e.key === "r" || e.key === "R") refreshNow();
   });
 
   // Guide: fill in live parameters and a worked example on a top repo with non-trivial components.
@@ -361,7 +394,6 @@ Score = 100 × ( ${pct(w.popularity)}% popularity + ${pct(w.momentum)}% momentum
   $("foot").textContent = `Score = ${w.popularity * 100}% popularity + ${w.momentum * 100}% momentum + ${w.freshness * 100}% freshness · topics: ${data.topics.join(", ")}`;
   render();
   // Pick up fresh data written by the scheduled tracker.
-  setInterval(() => { if (document.visibilityState === "visible" && !$("q").value) location.reload(); }, 15 * 60 * 1000);
 })();
 </script>
 </body>

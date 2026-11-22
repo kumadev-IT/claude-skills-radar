@@ -1,0 +1,10 @@
+{
+  "name": "Skills Radar",
+  "short_name": "Skills Radar",
+  "description": "Trending Claude / AI-agent skill repositories",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#151413",
+  "theme_color": "#1d1c1a",
+  "icons": [{ "src": "/icon.png", "sizes": "256x256", "type": "image/png", "purpose": "any" }]
+}

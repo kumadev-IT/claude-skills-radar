@@ -24,7 +24,7 @@ SOFTWARE.
 Third-party notice
 --------------------------------------------------------------------------------
 
-Portions of tracker.py are derived from "trending-claude-skills"
+Portions of skills_radar/tracker.py are derived from "trending-claude-skills"
 (https://github.com/linny006/trending-claude-skills), distributed under the
 MIT License:
 

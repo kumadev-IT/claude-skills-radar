@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skills-radar"
+dynamic = ["version"]
+description = "Local radar for trending Claude / AI-agent skill repositories on GitHub"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "kumadev" }]
+dependencies = []
+keywords = ["claude", "claude-code", "skills", "agent-skills", "github", "dashboard"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Web Environment",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Homepage = "https://github.com/kumadev-IT/claude-skills-radar"
+
+[project.scripts]
+skills-radar = "skills_radar.cli:main"
+
+[project.gui-scripts]
+skills-radar-gui = "skills_radar.cli:main"
+
+[tool.setuptools]
+packages = ["skills_radar"]
+
+[tool.setuptools.dynamic]
+version = { attr = "skills_radar.__version__" }
+
+[tool.setuptools.package-data]
+skills_radar = ["web/*"]
